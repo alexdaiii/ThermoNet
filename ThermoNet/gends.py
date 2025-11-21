@@ -16,27 +16,81 @@ def parse_cmd():
     Command-line arguments.
     """
     parser = ArgumentParser()
-    parser.add_argument('-i', '--input', dest='input', type=str,
-                        help='File that contains a list of protein mutations.')
-    parser.add_argument('-o', '--output', dest='output', type=str,
-                        help='File to which to write the dataset.')
-    parser.add_argument('-p', '--pdb_dir', dest='pdb_dir', type=str,
-                        help='Directory where PDB file are stored.')
-    parser.add_argument('-r', '--rotations', dest='rotations', type=float, nargs=3,
-                        help='Rotation angles in radian around all three axes.')
-    parser.add_argument('--boxsize', dest='boxsize', type=int,
-                        help='Size of the bounding box around the mutation site.')
-    parser.add_argument('--voxelsize', dest='voxelsize', type=int,
-                        help='Size of the voxel.')
-    parser.add_argument('-w', '--overwrite', dest='overwrite', action='store_true',
-                        help='Whether to overwrite PDBQT files and mutant PDB files.')
-    parser.add_argument('-v', '--verbose', dest='verbose', action='store_true',
-                        help='Whether to print verbose messages from HTMD function calls.')
-    parser.add_argument('--reverse', dest='reverse', action='store_true',
-                        help='This flag indicates that the given list of mutations are reverse mutations')
+    parser.add_argument(
+        "-i",
+        "--input",
+        dest="input",
+        type=str,
+        help="File that contains a list of protein mutations.",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        dest="output",
+        type=str,
+        help="File to which to write the dataset.",
+    )
+    parser.add_argument(
+        "-p",
+        "--pdb_dir",
+        dest="pdb_dir",
+        type=str,
+        help="Directory where PDB file are stored.",
+    )
+    parser.add_argument(
+        "-r",
+        "--rotations",
+        dest="rotations",
+        type=float,
+        nargs=3,
+        help="Rotation angles in radian around all three axes.",
+    )
+    parser.add_argument(
+        "--boxsize",
+        dest="boxsize",
+        type=int,
+        help="Size of the bounding box around the mutation site.",
+    )
+    parser.add_argument(
+        "--voxelsize", dest="voxelsize", type=int, help="Size of the voxel."
+    )
+    parser.add_argument(
+        "-w",
+        "--overwrite",
+        dest="overwrite",
+        action="store_true",
+        help="Whether to overwrite PDBQT files and mutant PDB files.",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        dest="verbose",
+        action="store_true",
+        help="Whether to print verbose messages from HTMD function calls.",
+    )
+    parser.add_argument(
+        "--reverse",
+        dest="reverse",
+        action="store_true",
+        help="This flag indicates that the given list of mutations are reverse mutations",
+    )
+    parser.add_argument(
+        "--chain_id",
+        dest="chain_id",
+        type=str,
+        default="A",
+        help="Chain identifier in the PDB file. Default is a monomer with chain ID 'A'.",
+    )
+    parser.add_argument(
+        "--no_merge",
+        dest="no_merge",
+        action="store_true",
+        help="If set, do not merge per-group .npy parts into a single output file; keep parts only.",
+    )
     args = parser.parse_args()
     # do any necessary argument checking here before returning
     return args
+
 
 
 def main():
@@ -48,6 +102,8 @@ def main():
     """
     args = parse_cmd()
 
+    chain_id = args.chain_id
+
     # calculate rotation angles
     if args.rotations is not None:
         rotations = np.pi * np.array(args.rotations)
@@ -55,44 +111,64 @@ def main():
         rotations = None
 
     dataset = []
-    with open(args.input, 'rt') as f:
+    with open(args.input, "rt") as f:
         # to store computed wt features
         features_wt_all = {}
-        for l in f:
+        for i, l in enumerate(f):
             # get mutation identifiers
             pdb_chain, pos, wt, mt = l.strip().split()
 
             # make sure that the PDB file for wild-type exists
             pdb_dir = os.path.abspath(args.pdb_dir)
-            wt_pdb_path = os.path.join(pdb_dir, pdb_chain, pdb_chain + '_relaxed.pdb')
+            wt_pdb_path = os.path.join(pdb_dir, pdb_chain, pdb_chain + "_relaxed.pdb")
             if not os.path.exists(wt_pdb_path):
-                print('PDB file for wild-type does not exist: ' + wt_pdb_path)
+                print("PDB file for wild-type does not exist: " + wt_pdb_path)
                 sys.exit(1)
 
             # calculate wt features
             if pdb_chain + pos not in features_wt_all:
-                print('Now computing features for: {0}'.format(wt_pdb_path))
+                print("Now computing features for: {0}".format(wt_pdb_path))
                 # HTMD generates channel-first tensors
-                features = pdb_utils.compute_voxel_features(pos, wt_pdb_path, boxsize=args.boxsize,
-                        voxelsize=args.voxelsize, verbose=args.verbose, rotations=rotations)
+                features = pdb_utils.compute_voxel_features(
+                    pos,
+                    wt_pdb_path,
+                    boxsize=args.boxsize,
+                    voxelsize=args.voxelsize,
+                    verbose=args.verbose,
+                    rotations=rotations,
+                )
                 features_wt_all[pdb_chain + pos] = features
 
             # create a structural model for the mutant
-            mt_pdb_path = os.path.join(pdb_dir, pdb_chain, pdb_chain + '_' + wt + \
-                    pos + mt + '_relaxed.pdb')
+            mt_pdb_path = os.path.join(
+                pdb_dir, pdb_chain, pdb_chain + "_" + wt + pos + mt + "_relaxed.pdb"
+            )
             if not os.path.exists(mt_pdb_path):
-                print('PDB file for mutant does not exist: ' + mt_pdb_path)
-                print('Running Rosetta to generate a mutant structure ...')
-                mt_pdb_path_tmp = pdb_utils.build_mt_struct(wt_pdb_path, chain_id, pos, wt, mt, \
-                        args.overwrite, os.path.join(pdb_dir, pdb_chain))
+                print("PDB file for mutant does not exist: " + mt_pdb_path)
+                print("Running Rosetta to generate a mutant structure ...")
+                mt_pdb_path_tmp = pdb_utils.build_mt_struct(
+                    wt_pdb_path,
+                    chain_id,
+                    pos,
+                    wt,
+                    mt,
+                    args.overwrite,
+                    os.path.join(pdb_dir, pdb_chain),
+                )
                 # rename the mutant PDB file to ${pdb_chain}_${variant}_relaxed.pdb
                 os.rename(mt_pdb_path_tmp, mt_pdb_path)
 
             # calculate mutant features
-            print('Now computing features for: {0}'.format(mt_pdb_path))
+            print("Now computing features for: {0}".format(mt_pdb_path))
             # HTMD generates channel-first tensors
-            features_mt = pdb_utils.compute_voxel_features(pos, mt_pdb_path, boxsize=args.boxsize,
-                    voxelsize=args.voxelsize, verbose=args.verbose, rotations=rotations)
+            features_mt = pdb_utils.compute_voxel_features(
+                pos,
+                mt_pdb_path,
+                boxsize=args.boxsize,
+                voxelsize=args.voxelsize,
+                verbose=args.verbose,
+                rotations=rotations,
+            )
 
             # make the property channels the first axis
             features_wt = features_wt_all[pdb_chain + pos]
@@ -106,18 +182,22 @@ def main():
                 features_combined = np.concatenate((features_wt, features_mt), axis=0)
             dataset.append(features_combined)
 
+            if i > 10:
+                print("For demonstration purpose, only processing 10 mutations.")
+                break
+
     # convert into NumPy ndarray
     dataset = np.array(dataset)
-    print('The generated dataset has shape: {0}'.format(dataset.shape))
+    print("The generated dataset has shape: {0}".format(dataset.shape))
 
     # write dataset to disk file
-    print('Now writing dataset to disk file: {0}'.format(args.output))
+    print("Now writing dataset to disk file: {0}".format(args.output))
     np.save(args.output, dataset)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     start_time = time.time()
     main()
     end_time = time.time()
     elapsed = end_time - start_time
-    print('gends.py took', elapsed, 'seconds to generate the dataset.')
+    print("gends.py took", elapsed, "seconds to generate the dataset.")

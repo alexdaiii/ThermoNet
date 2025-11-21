@@ -1,9 +1,11 @@
 name: thermonet
 channels:
   - acellera
-  - defaults
   - conda-forge
+  - defaults
 dependencies:
-  - python=3.7
+  - python=3.10
   - htmd
-prefix: /your/path/.conda/envs/thermonet
+  - pip
+  - pip:
+      - ray[default]
